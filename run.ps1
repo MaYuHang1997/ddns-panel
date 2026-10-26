@@ -41,4 +41,13 @@ Write-Host "cwd    : $here"
 Write-Host "url    : http://127.0.0.1:8300"
 Write-Host ''
 
+# Refuse to start a second instance. Without this, a logon task firing while
+# the panel is already up just dies with "address already in use".
+$busy = Get-NetTCPConnection -State Listen -LocalPort 8300 -ErrorAction SilentlyContinue
+if ($busy) {
+  $pids = ($busy.OwningProcess | Select-Object -Unique) -join ','
+  Write-Host "port 8300 already in use by pid $pids - panel is running, exiting."
+  exit 0
+}
+
 & $python -m uvicorn app:app --host 127.0.0.1 --port 8300 --log-level info

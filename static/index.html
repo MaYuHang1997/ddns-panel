@@ -81,6 +81,26 @@ tr:last-child td{border-bottom:none}
   </div>
 
   <div class="card">
+    <h2>自动轮询</h2>
+    <div class="obs" id="schedState"><div class="empty">加载中…</div></div>
+    <div class="grid g4" style="margin-top:14px">
+      <div><label>间隔（秒，最小 60）</label>
+        <input id="schedInterval" type="number" min="60" max="86400" value="300"></div>
+      <div><label>失败退避上限（秒）</label>
+        <input id="schedMax" type="number" min="300" max="86400" value="3600"></div>
+      <div><label>累计</label>
+        <div class="mono" id="schedTotals" style="padding-top:5px">—</div></div>
+      <div><label>操作</label>
+        <div class="row">
+          <button class="primary" onclick="saveScheduler()">保存</button>
+          <button onclick="toggleScheduler()">暂停/恢复</button>
+          <button onclick="runNow()">立即轮询</button>
+        </div></div>
+    </div>
+    <div class="hint" id="schedHint"></div>
+  </div>
+
+  <div class="card">
     <h2>账号</h2>
     <div id="accounts"><div class="empty">加载中…</div></div>
     <div class="grid g4" style="margin-top:14px">
@@ -243,9 +263,88 @@ async function loadChanges() {
     }).join('')}</tbody></table>`;
 }
 
+let schedData = null, schedTick = null;
+
+async function loadScheduler() {
+  const d = await api('/api/scheduler');
+  schedData = d;
+  $('schedInterval').value = d.interval_seconds;
+  $('schedMax').value = d.max_interval_seconds;
+
+  const sum = d.last_summary;
+  const lastResult = sum
+    ? `检查 ${sum.checked}，变更 ${sum.changed}，失败 ${sum.failed}`
+    : (d.last_error ? esc(d.last_error) : '—');
+  $('schedState').innerHTML = `
+    <div class="kv"><span class="k">状态</span><span class="v">${
+      d.enabled ? '<span class="tag on">已启用</span>'
+                : '<span class="tag off">已暂停</span>'}</span></div>
+    <div class="kv"><span class="k">下次运行</span>
+      <span class="v" id="schedNext">${
+        (d.enabled && d.next_run_in_seconds != null)
+          ? d.next_run_in_seconds + ' 秒后' : '—'}</span></div>
+    <div class="kv"><span class="k">上次运行</span>
+      <span class="v">${esc(d.last_run_at || '—')}${
+        d.last_duration_ms != null ? '（' + d.last_duration_ms + ' ms）' : ''}</span></div>
+    <div class="kv"><span class="k">上次结果</span><span class="v">${lastResult}</span></div>`;
+
+  $('schedTotals').textContent =
+    `轮询 ${d.total_runs} 次 / 变更 ${d.total_changes} 次`;
+
+  $('schedHint').textContent = d.consecutive_failures > 0
+    ? `连续失败 ${d.consecutive_failures} 次，等待已退避到 ${d.effective_interval} 秒；成功一次即恢复为 ${d.interval_seconds} 秒`
+    : (d.enabled
+        ? `每 ${d.interval_seconds} 秒轮询一次；只有地址确实变化时才写入 DNS`
+        : '轮询已暂停，不会自动写入 DNS');
+
+  clearInterval(schedTick);
+  let left = d.next_run_in_seconds;
+  if (d.enabled && left != null) {
+    schedTick = setInterval(() => {
+      left = Math.max(0, left - 1);
+      const el = $('schedNext');
+      if (el) el.textContent = left + ' 秒后';
+      if (left <= 0) { clearInterval(schedTick); setTimeout(loadScheduler, 1800); }
+    }, 1000);
+  }
+}
+
+async function saveScheduler() {
+  try {
+    await api('/api/scheduler/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        interval_seconds: parseInt($('schedInterval').value, 10),
+        max_interval_seconds: parseInt($('schedMax').value, 10)
+      })
+    });
+    toast('配置已保存'); loadScheduler();
+  } catch (e) { toast('保存失败：' + e.message, true); }
+}
+
+async function toggleScheduler() {
+  if (!schedData) return;
+  await api('/api/scheduler/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: !schedData.enabled})
+  });
+  toast(schedData.enabled ? '已暂停' : '已启用'); loadScheduler();
+}
+
+async function runNow() {
+  toast('轮询中…');
+  try {
+    const r = await api('/api/scheduler/run', {method: 'POST'});
+    toast(r.ok ? `检查 ${r.checked} 条，变更 ${r.changed} 条`
+               : '有失败：' + (r.error || ''), !r.ok);
+    loadAll();
+  } catch (e) { toast('轮询失败：' + e.message, true); }
+}
+
 async function loadAll() {
   try {
-    await Promise.all([loadObserve(), loadAccounts(), loadRecords(), loadChanges()]);
+    await Promise.all([loadObserve(), loadScheduler(),
+                       loadAccounts(), loadRecords(), loadChanges()]);
   } catch (e) { toast('加载失败：' + e.message, true); }
 }
 

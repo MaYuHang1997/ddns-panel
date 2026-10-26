@@ -27,6 +27,7 @@ for p in (str(_HERE), str(_CORE)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+import scheduler  # noqa: E402
 import store  # noqa: E402
 import sync  # noqa: E402
 from alidns import AliDnsClient, AliDnsError  # noqa: E402
@@ -38,7 +39,11 @@ STATIC = _HERE / "static"
 async def lifespan(app: FastAPI):
     store.init_db()
     store.load_or_create_master_key()
-    yield
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.stop()
 
 
 app = FastAPI(title="DDNS Panel", version="0.1.0", lifespan=lifespan)
@@ -65,6 +70,12 @@ class RecordIn(BaseModel):
 
 class EnabledIn(BaseModel):
     enabled: bool
+
+
+class SchedulerConfigIn(BaseModel):
+    enabled: bool | None = None
+    interval_seconds: int | None = Field(default=None, ge=60, le=86400)
+    max_interval_seconds: int | None = Field(default=None, ge=300, le=86400)
 
 
 # --------------------------------------------------------------------------- #
@@ -186,6 +197,36 @@ def sync_everything(dry_run: bool = False) -> dict[str, Any]:
         "failed": sum(1 for r in results if not r["ok"]),
         "results": results,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Scheduler
+# --------------------------------------------------------------------------- #
+@app.get("/api/scheduler")
+def scheduler_status() -> dict[str, Any]:
+    """Config plus live state: last run, next run, failure backoff."""
+    return scheduler.status()
+
+
+@app.post("/api/scheduler/config")
+def scheduler_config(payload: SchedulerConfigIn) -> dict[str, Any]:
+    if (
+        payload.enabled is None
+        and payload.interval_seconds is None
+        and payload.max_interval_seconds is None
+    ):
+        raise HTTPException(400, "nothing to change")
+    return scheduler.set_config(
+        enabled=payload.enabled,
+        interval_seconds=payload.interval_seconds,
+        max_interval_seconds=payload.max_interval_seconds,
+    )
+
+
+@app.post("/api/scheduler/run")
+def scheduler_run() -> dict[str, Any]:
+    """Poll immediately, outside the schedule. Recording rules identical."""
+    return scheduler.run_once()
 
 
 # --------------------------------------------------------------------------- #

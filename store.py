@@ -132,6 +132,12 @@ CREATE TABLE IF NOT EXISTS changes (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_changes_created ON changes(created_at DESC);
 """
 
@@ -293,3 +299,43 @@ def list_changes(limit: int = 100) -> list[dict[str, Any]]:
             "SELECT * FROM changes ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+# Settings (key/value, used for scheduler config)
+# --------------------------------------------------------------------------- #
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with connect() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def get_setting_int(key: str, default: int) -> int:
+    raw = get_setting(key)
+    try:
+        return int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def get_setting_bool(key: str, default: bool) -> bool:
+    raw = get_setting(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def set_setting(key: str, value: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at) VALUES (?,?,?)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value,"
+            " updated_at=excluded.updated_at",
+            (key, str(value), now_iso()),
+        )
+
+
+def all_settings() -> dict[str, str]:
+    with connect() as conn:
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    return {r["key"]: r["value"] for r in rows}
