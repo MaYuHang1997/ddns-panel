@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime data — lives in D:\ddns-panel-data by default.
+# Kept here as a second line of defence: an SQLite db and the AES master key
+# must never be committed, let alone pushed.
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+master.key
+*.key
+
+# Secrets / local config
+.env
+*.local.json
+
+# Logs
+*.log
+logs/

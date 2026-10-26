@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDNS 控制台</title>
+<style>
+:root{
+  --bg:#121212; --card:#1b1b1b; --card2:#202020; --line:#2b2b2b;
+  --fg:#e9e9e9; --muted:#8b8b8b; --accent:#5b9dd9;
+  --ok:#4ade80; --err:#f87171; --warn:#fbbf24;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:13px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 20px 60px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+h1{font-size:16px;font-weight:500;margin:0;letter-spacing:.3px}
+.spacer{flex:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:16px;margin-bottom:14px}
+.card h2{font-size:13px;font-weight:500;margin:0 0 12px;color:var(--muted);
+  letter-spacing:.5px;text-transform:uppercase}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+button{background:var(--card2);color:var(--fg);border:1px solid var(--line);
+  border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;
+  font-family:inherit;transition:border-color .15s,background .15s}
+button:hover{border-color:#3d3d3d;background:#262626}
+button.primary{background:#24405c;border-color:#2f5c85;color:#cfe4f7}
+button.primary:hover{background:#2b4d6e}
+button.danger:hover{border-color:#5a2a2a;color:var(--err)}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select{background:#151515;color:var(--fg);border:1px solid var(--line);
+  border-radius:6px;padding:6px 9px;font-size:12px;width:100%;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#3a5f82}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.kv{display:flex;flex-direction:column;gap:2px}
+.kv .k{font-size:11px;color:var(--muted)}
+.kv .v{font-size:13px;font-family:ui-monospace,Consolas,monospace;word-break:break-all}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--muted);font-weight:400;font-size:11px;
+  padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid #232323;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.mono{font-family:ui-monospace,Consolas,monospace;word-break:break-all}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px}
+.tag.a{background:#1e3a52;color:#8ec5f0}
+.tag.aaaa{background:#2d2a45;color:#b3a8f0}
+.tag.on{background:#1d3326;color:var(--ok)}
+.tag.off{background:#2e2424;color:#c98a8a}
+.tag.ok{background:#1d3326;color:var(--ok)}
+.tag.err{background:#3a2222;color:var(--err)}
+.tag.noop{background:#2a2a2a;color:var(--muted)}
+.obs{display:flex;gap:20px;flex-wrap:wrap}
+.obs>div{min-width:180px}
+.hint{color:var(--muted);font-size:11px;margin-top:8px;line-height:1.5}
+.row{display:flex;gap:8px;align-items:center}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+#toast{position:fixed;right:20px;bottom:20px;background:#233;border:1px solid #345;
+  color:#cfe4f7;padding:10px 14px;border-radius:8px;font-size:12px;opacity:0;
+  transition:opacity .2s;pointer-events:none;max-width:380px}
+#toast.show{opacity:1}
+.empty{color:var(--muted);font-size:12px;padding:12px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>DDNS 控制台</h1>
+    <span class="spacer"></span>
+    <button onclick="loadAll()">刷新</button>
+    <button class="primary" onclick="syncAll()">全部同步</button>
+  </header>
+
+  <div class="card">
+    <h2>当前观测</h2>
+    <div class="obs" id="observe"><div class="empty">加载中…</div></div>
+    <div class="hint" id="observeHint"></div>
+  </div>
+
+  <div class="card">
+    <h2>账号</h2>
+    <div id="accounts"><div class="empty">加载中…</div></div>
+    <div class="grid g4" style="margin-top:14px">
+      <div><label>名称</label><input id="accName" placeholder="主账号"></div>
+      <div><label>AccessKey ID</label><input id="accId" placeholder="LTAI..."></div>
+      <div><label>AccessKey Secret</label><input id="accSecret" type="password" placeholder="••••"></div>
+      <div><label>接入点</label>
+        <select id="accEndpoint">
+          <option value="https://alidns.aliyuncs.com/">alidns.aliyuncs.com</option>
+          <option value="https://alidns.cn-hangzhou.aliyuncs.com/">alidns.cn-hangzhou</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="addAccount()">添加账号</button>
+      <span class="hint" style="margin:0">密钥用 AES-256-GCM 加密后落库，主密钥只在 master.key 里</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>记录</h2>
+    <div id="records"><div class="empty">加载中…</div></div>
+    <div class="grid g4" style="margin-top:14px">
+      <div><label>账号</label><select id="recAccount"></select></div>
+      <div><label>域名</label><input id="recDomain" placeholder="olbaid.asia"></div>
+      <div><label>主机记录</label><input id="recRr" value="@" placeholder="@ 或 home"></div>
+      <div><label>来源</label>
+        <select id="recSource">
+          <option value="v4">IPv4 (A)</option>
+          <option value="v6">IPv6 (AAAA)</option>
+        </select>
+      </div>
+      <div><label>TTL</label><input id="recTtl" type="number" value="600" min="1" max="86400"></div>
+      <div><label>AAAA 后缀</label><input id="recSuffix" value="::1" placeholder="::1"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="addRecord()">添加记录</button>
+      <span class="hint" style="margin:0">IPv6 只取 /64 前缀，后缀自选，隐私地址轮换不影响</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>变更日志</h2>
+    <div id="changes"><div class="empty">加载中…</div></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let toastTimer;
+function toast(msg, bad) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.style.borderColor = bad ? '#5a2a2a' : '#345';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3800);
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { const j = await res.json(); detail = j.detail || detail; } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+async function loadObserve() {
+  try {
+    const d = await api('/api/observe');
+    const tmpCount = d.ipv6_addresses.filter(a => a.is_temporary).length;
+    $('observe').innerHTML = `
+      <div class="kv"><span class="k">公网 IPv4</span>
+        <span class="v">${esc(d.ipv4 || '未取到')}</span></div>
+      <div class="kv"><span class="k">IPv6 前缀</span>
+        <span class="v">${esc(d.ipv6_prefixes[0] || '无')}</span></div>
+      <div class="kv"><span class="k">AAAA 示例</span>
+        <span class="v">${esc(d.ipv6_aaaa_example || '无')}</span></div>
+      <div class="kv"><span class="k">本机 IPv6</span>
+        <span class="v">${d.ipv6_addresses.length} 个（${tmpCount} 个临时）</span></div>`;
+    const agree = (d.ipv4_observers || []).filter(o => o.answer === d.ipv4).length;
+    $('observeHint').textContent = d.ipv4
+      ? `IPv4 由 ${agree}/${d.ipv4_observers.length} 个观测站一致确认；IPv6 取 /64 前缀，后缀自选`
+      : 'IPv4 观测站未达成一致，同步会被拒绝（不会写入猜测值）';
+  } catch (e) {
+    $('observe').innerHTML = `<div class="empty">观测失败：${esc(e.message)}</div>`;
+  }
+}
+
+async function loadAccounts() {
+  const list = await api('/api/accounts');
+  if (!list.length) {
+    $('accounts').innerHTML = '<div class="empty">还没有账号，先添加一个</div>';
+  } else {
+    $('accounts').innerHTML = `<table><thead><tr>
+      <th>名称</th><th>AccessKey</th><th>接入点</th><th>创建时间</th><th></th>
+      </tr></thead><tbody>${list.map(a => `<tr>
+        <td>${esc(a.name)}</td>
+        <td class="mono">${esc(a.ak_id_hint)}</td>
+        <td class="mono" style="color:var(--muted)">${esc(a.endpoint)}</td>
+        <td style="color:var(--muted)">${esc(a.created_at)}</td>
+        <td><div class="actions">
+          <button onclick="testAccount(${a.id})">测试</button>
+          <button class="danger" onclick="delAccount(${a.id})">删除</button>
+        </div></td></tr>`).join('')}</tbody></table>`;
+  }
+  $('recAccount').innerHTML = list.map(a =>
+    `<option value="${a.id}">${esc(a.name)}</option>`).join('')
+    || '<option value="">先添加账号</option>';
+}
+
+async function loadRecords() {
+  const list = await api('/api/records');
+  if (!list.length) {
+    $('records').innerHTML = '<div class="empty">还没有记录</div>';
+    return;
+  }
+  $('records').innerHTML = `<table><thead><tr>
+    <th>名称</th><th>类型</th><th>当前值</th><th>状态</th>
+    <th>上次检查</th><th></th></tr></thead><tbody>${list.map(r => {
+      const label = (r.rr === '@' || !r.rr) ? r.domain : r.rr + '.' + r.domain;
+      return `<tr>
+        <td class="mono">${esc(label)}</td>
+        <td><span class="tag ${r.rtype === 'AAAA' ? 'aaaa' : 'a'}">${esc(r.rtype)}</span></td>
+        <td class="mono">${esc(r.last_value || '—')}</td>
+        <td><span class="tag ${r.enabled ? 'on' : 'off'}">${r.enabled ? '启用' : '停用'}</span></td>
+        <td style="color:var(--muted)">${esc(r.last_check_at || '—')}</td>
+        <td><div class="actions">
+          <button class="primary" onclick="syncOne(${r.id})">同步</button>
+          <button onclick="toggle(${r.id}, ${r.enabled ? 0 : 1})">${r.enabled ? '停用' : '启用'}</button>
+          <button class="danger" onclick="delRecord(${r.id})">删除</button>
+        </div></td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+async function loadChanges() {
+  const list = await api('/api/changes?limit=40');
+  if (!list.length) {
+    $('changes').innerHTML = '<div class="empty">还没有变更</div>';
+    return;
+  }
+  $('changes').innerHTML = `<table><thead><tr>
+    <th>时间</th><th>记录</th><th>动作</th><th>旧值</th><th>新值</th><th>说明</th>
+    </tr></thead><tbody>${list.map(c => {
+      const cls = !c.ok ? 'err' : (c.action === 'noop' ? 'noop' : 'ok');
+      return `<tr>
+        <td style="color:var(--muted);white-space:nowrap">${esc(c.created_at)}</td>
+        <td class="mono">${esc((c.rr === '@' ? '' : c.rr + '.') + c.domain)}
+          <span class="tag ${c.rtype === 'AAAA' ? 'aaaa' : 'a'}">${esc(c.rtype)}</span></td>
+        <td><span class="tag ${cls}">${esc(c.action)}</span></td>
+        <td class="mono" style="color:var(--muted)">${esc(c.old_value || '—')}</td>
+        <td class="mono">${esc(c.new_value || '—')}</td>
+        <td style="color:var(--muted)">${esc(c.message)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+async function loadAll() {
+  try {
+    await Promise.all([loadObserve(), loadAccounts(), loadRecords(), loadChanges()]);
+  } catch (e) { toast('加载失败：' + e.message, true); }
+}
+
+async function addAccount() {
+  const name = $('accName').value.trim();
+  const ak_id = $('accId').value.trim();
+  const ak_secret = $('accSecret').value.trim();
+  if (!name || !ak_id || !ak_secret) return toast('三项都要填', true);
+  try {
+    await api('/api/accounts', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, ak_id, ak_secret, endpoint: $('accEndpoint').value})
+    });
+    $('accName').value = $('accId').value = $('accSecret').value = '';
+    toast('账号已添加');
+    loadAll();
+  } catch (e) { toast('添加失败：' + e.message, true); }
+}
+
+async function testAccount(id) {
+  toast('测试中…');
+  try {
+    const r = await api(`/api/accounts/${id}/test`, {method: 'POST'});
+    if (r.ok) toast(`连接正常，共 ${r.total} 个域名：${r.domains.join(', ')}`);
+    else toast(`失败 ${r.code}: ${r.message}`, true);
+  } catch (e) { toast('测试失败：' + e.message, true); }
+}
+
+async function delAccount(id) {
+  if (!confirm('删除账号会同时删除它的记录，确定？')) return;
+  await api(`/api/accounts/${id}`, {method: 'DELETE'});
+  toast('已删除'); loadAll();
+}
+
+async function addRecord() {
+  const account_id = parseInt($('recAccount').value, 10);
+  const domain = $('recDomain').value.trim();
+  const rr = $('recRr').value.trim() || '@';
+  if (!account_id) return toast('先添加账号', true);
+  if (!domain) return toast('域名必填', true);
+  try {
+    await api('/api/records', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        account_id, domain, rr, source: $('recSource').value,
+        ttl: parseInt($('recTtl').value, 10) || 600,
+        suffix: $('recSuffix').value.trim() || '::1'
+      })
+    });
+    toast('记录已添加'); loadAll();
+  } catch (e) { toast('添加失败：' + e.message, true); }
+}
+
+async function syncOne(id) {
+  toast('同步中…');
+  try {
+    const r = await api(`/api/records/${id}/sync`, {method: 'POST'});
+    toast(r.ok ? r.message : '失败：' + r.message, !r.ok);
+    loadRecords(); loadChanges(); loadObserve();
+  } catch (e) { toast('同步失败：' + e.message, true); }
+}
+
+async function syncAll() {
+  if (!confirm('对全部启用记录执行同步？')) return;
+  toast('同步中…');
+  try {
+    const r = await api('/api/sync', {method: 'POST'});
+    toast(`完成：${r.count} 条，变更 ${r.changed} 条，失败 ${r.failed} 条`, r.failed > 0);
+    loadAll();
+  } catch (e) { toast('同步失败：' + e.message, true); }
+}
+
+async function toggle(id, enabled) {
+  await api(`/api/records/${id}/enabled`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: !!enabled})
+  });
+  loadRecords();
+}
+
+async function delRecord(id) {
+  if (!confirm('确定删除这条记录？')) return;
+  await api(`/api/records/${id}`, {method: 'DELETE'});
+  toast('已删除'); loadAll();
+}
+
+loadAll();
+</script>
+</body>
+</html>
