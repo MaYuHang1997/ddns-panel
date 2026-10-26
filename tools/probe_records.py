@@ -46,7 +46,7 @@ def main() -> int:
     print()
     print("=== DescribeDomainRecords (all records) ===")
     try:
-        res = cli.list_records("olbaid.asia")
+        res = cli.list_records("example.com")
         recs = res.get("DomainRecords", {}).get("Record", [])
         print(f"  total = {res.get('TotalCount')}  returned = {len(recs)}")
         for r in recs:
@@ -64,7 +64,7 @@ def main() -> int:
     for rtype in ("A", "AAAA", None):
         label = rtype or "(all)"
         try:
-            sub = cli.describe_subdomain("olbaid.asia", rtype)
+            sub = cli.describe_subdomain("example.com", rtype)
             recs = sub.get("DomainRecords", {}).get("Record", [])
             print(f"  Type={label:8} total={sub.get('TotalCount')}")
             for r in recs:

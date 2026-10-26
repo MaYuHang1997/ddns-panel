@@ -65,7 +65,7 @@ def main() -> int:
     tree = ET.parse(args.config)
     cfg = {e.get("key"): (e.get("value") or "") for e in tree.getroot().iter("add")}
 
-    full_domain = cfg.get("fullDomainName", "")   # e.g. "@.olbaid.asia"
+    full_domain = cfg.get("fullDomainName", "")   # e.g. "@.example.com"
     ttl = int(cfg.get("TTL") or 600)
     if "." not in full_domain:
         raise SystemExit(f"unexpected fullDomainName: {full_domain!r}")

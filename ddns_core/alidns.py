@@ -259,7 +259,7 @@ class AliDnsClient:
     def describe_subdomain(
         self, subdomain: str, rtype: str | None = None
     ) -> dict[str, Any]:
-        """Look up a specific subdomain (e.g. home.olbaid.asia)."""
+        """Look up a specific subdomain (e.g. home.example.com)."""
         return self.call_v2("DescribeSubDomainRecords", SubDomain=subdomain, Type=rtype)
 
     def record_info(self, record_id: str) -> dict[str, Any]:
